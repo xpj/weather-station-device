@@ -3,10 +3,7 @@
 #include <PubSubClient.h>
 #include <Wire.h>
 #include <SPI.h>
-
-#include <BH1750.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BMP085_U.h>
+#include <AdaSensors.h>
 
 #include "I2CScanner.h"
 #include "RTCAdafruit.h"
@@ -31,10 +28,7 @@ const char *server = MQTT_SERVER;
 
 RTCAdafruit *rtclock;
 BME280TG *bme280TG;
-
-BH1750 lightMeter(0x23);
-Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085);
-
+AdaSensors *adaSensors;
 
 WiFiClient wifiClient;
 
@@ -111,49 +105,9 @@ void connectWifi() {
     Serial.println("");
 }
 
-void connectLightMeter() {
-    Serial.println("Connecting BH1750 Light Sensor");
-    lightMeter.begin(BH1750_CONTINUOUS_HIGH_RES_MODE);
-    Serial.println("Connected to BH1750 Light Sensor");
-    Serial.println();
-}
-
-void connectPressureSensor() {
-    Serial.println("Connecting BMP180 Pressure and Temperature Sensor");
-    if (!bmp.begin()) {
-        Serial.print("Ooops, no BMP180 detected ... Check your wiring or I2C ADDR!");
-        while (1);
-    }
-    Serial.println("Connected to BMP180 Pressure and Temperature Sensor");
-    Serial.println();
-}
-
 void setupLeds() {
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
-}
-
-uint16_t getLux() {
-    return lightMeter.readLightLevel();
-}
-
-float getAdaPressure() {
-    float pressure;
-    bmp.getPressure(&pressure);
-
-    return pressure;
-}
-
-float getAdaTemperature() {
-    float temperature;
-    bmp.getTemperature(&temperature);
-
-    return temperature;
-}
-
-float getAdaAltitude() {
-    float seaLevelPressure = SENSORS_PRESSURE_SEALEVELHPA;
-    return bmp.pressureToAltitude(seaLevelPressure, getAdaPressure());
 }
 
 void handleRainGaugeTick() {
@@ -235,16 +189,16 @@ void process() {
     bme280TG->get(&event280);
 
     Serial.print("Light:       ");
-    Serial.print(getLux());
+    Serial.print(adaSensors->getLux());
     Serial.println(" lx");
     Serial.print("Pressure:    ");
-    Serial.print(getAdaPressure());
+    Serial.print(adaSensors->getPressure());
     Serial.println(" hPa");
     Serial.print("Temperature: ");
-    Serial.print(getAdaTemperature());
+    Serial.print(adaSensors->getTemperature());
     Serial.println(" C");
     Serial.print("Altitude:    ");
-    Serial.print(getAdaAltitude());
+    Serial.print(adaSensors->getAltitude());
     Serial.println(" m");
 
     Serial.print("Press280:    ");
@@ -283,10 +237,9 @@ void setup() {
     new I2CScanner();
     rtclock = new RTCAdafruit();
     bme280TG = new BME280TG();
+    adaSensors = new AdaSensors();
     connectWifi();
     connectMQTT();
-    connectLightMeter();
-    connectPressureSensor();
     connectRainGauge();
 }
 
