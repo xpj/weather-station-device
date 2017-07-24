@@ -7,10 +7,10 @@
 #include <BH1750.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP085_U.h>
-#include <BME280I2C.h>
 
 #include "I2CScanner.h"
 #include "RTCAdafruit.h"
+#include "BME280TG.h"
 
 #include "private.h"
 
@@ -30,38 +30,10 @@ const char *topic = MQTT_TOPIC;
 const char *server = MQTT_SERVER;
 
 RTCAdafruit *rtclock;
+BME280TG *bme280TG;
 
 BH1750 lightMeter(0x23);
 Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085);
-BME280I2C bme280;
-
-typedef enum {
-    TEMP_C = (1),
-    TEMP_F = (2),
-
-} temp_unit;
-
-typedef enum {
-    // unit: B000 = Pa, B001 = hPa, B010 = Hg, B011 = atm, B100 = bar, B101 = torr, B110 = N/m^2, B111 = psi
-    PA = (0),
-    HPA = (1),
-    HG = (2),
-    ATM = (3),
-    BAR = (4),
-    TORR = (5),
-    NM2 = (6),
-    PSI = (7)
-} pressure_unit;
-
-typedef struct {
-    float temperature;
-    temp_unit temperatureUnit;
-
-    float pressure;
-    pressure_unit pressureUnit;
-
-    float relative_humidity;
-} units_t;
 
 
 WiFiClient wifiClient;
@@ -146,13 +118,6 @@ void connectLightMeter() {
     Serial.println();
 }
 
-void connectBMP280() {
-    if (!bme280.begin()) {
-        Serial.println("Could not find a valid BMP280 sensor, check wiring!");
-        while (1);
-    }
-}
-
 void connectPressureSensor() {
     Serial.println("Connecting BMP180 Pressure and Temperature Sensor");
     if (!bmp.begin()) {
@@ -170,21 +135,6 @@ void setupLeds() {
 
 uint16_t getLux() {
     return lightMeter.readLightLevel();
-}
-
-void getBMP280Event(units_t *event) {
-
-    uint8_t pressureUnit(HPA);
-
-    float pressure(NAN), temperature(NAN), relative_humidity(NAN);
-    bme280.read(pressure, temperature, relative_humidity, pressureUnit, true);
-
-    memset(event, 0, sizeof(units_t));
-    event->pressure = pressure;
-    event->pressureUnit = HPA;
-    event->temperature = temperature;
-    event->temperatureUnit = TEMP_C;
-    event->relative_humidity = relative_humidity;
 }
 
 float getAdaPressure() {
@@ -205,26 +155,6 @@ float getAdaAltitude() {
     float seaLevelPressure = SENSORS_PRESSURE_SEALEVELHPA;
     return bmp.pressureToAltitude(seaLevelPressure, getAdaPressure());
 }
-
-
-float getPressure(units_t event) {
-    if (event.pressure) {
-        return event.pressure;
-    }
-}
-
-float getHumidity(units_t event) {
-    if (event.relative_humidity) {
-        return event.relative_humidity;
-    }
-}
-
-float getTemperature(units_t event) {
-    if (event.temperature) {
-        return event.temperature;
-    }
-}
-
 
 void handleRainGaugeTick() {
     unsigned long rainGaugeTickTime = millis();
@@ -302,7 +232,7 @@ void process() {
     getRainGaugeTicks();
 
     units_t event280;
-    getBMP280Event(&event280);
+    bme280TG->get(&event280);
 
     Serial.print("Light:       ");
     Serial.print(getLux());
@@ -318,13 +248,13 @@ void process() {
     Serial.println(" m");
 
     Serial.print("Press280:    ");
-    Serial.print(getPressure(event280));
+    Serial.print(bme280TG->getPressure(event280));
     Serial.println(" hPa");
     Serial.print("Temp 280:    ");
-    Serial.print(getTemperature(event280));
+    Serial.print(bme280TG->getTemperature(event280));
     Serial.println(" C");
     Serial.print("Hum 280:     ");
-    Serial.print(getHumidity(event280));
+    Serial.print(bme280TG->getHumidity(event280));
     Serial.println(" %");
 
     // Serial.print("Rain:        "); Serial.print(getRainSensorValue()); Serial.println(" %");
@@ -352,11 +282,11 @@ void setup() {
     setupLeds();
     new I2CScanner();
     rtclock = new RTCAdafruit();
+    bme280TG = new BME280TG();
     connectWifi();
     connectMQTT();
     connectLightMeter();
     connectPressureSensor();
-    connectBMP280();
     connectRainGauge();
 }
 
